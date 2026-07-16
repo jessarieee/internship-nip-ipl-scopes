@@ -1,0 +1,12 @@
+pygmt
+holoviews
+numpy
+datetime
+pandas
+matplotlib
+pyshtools
+requests
+glob
+os
+xarray
+cartopy
