@@ -1,0 +1,93 @@
+# %%
+
+# INSTRUCTIONS
+# Hexagon Array
+# Simulate a JWST-like segmented primary mirror using regular hexagons
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+import math
+
+# 2d grid
+N = 1000 # pixel count: 1000x1000
+x = np.linspace(-10, 10, num = N) # X ϵ [-10 cm, 10 cm]
+y = x # square ; Y ϵ [-10 cm, 10 cm]
+X, Y = np.meshgrid(x, y)
+
+# hexagon array parameters
+side = 1.5 # hexagon size circumradius (vertex to the center)
+ring = 2 # number of rings around the center hex  (1:7 :: 2:19)
+gap = 0.05 # gap between each hexa (0 = no gaps = touching)
+
+# compute for coordinates for inside of the hexagon
+centers = []
+for q in range(-ring, ring + 1): # bounds of the grid (outer loop)
+    r1 = max(-ring, -q - ring) # bottom bound ; chooses the max within the range ()
+    r2 = min(ring, -q + ring) # top bound ; chooses the min within the range ()
+        # row constraints to build symmetrical hexagon
+        # this limit the values inside the coordinate
+            # max(-ring, -q - ring) ≤ r ≤ min(ring, -q + ring); −ring ≤ r ≤ring
+            # |q + r| ≤ ring => -ring ≤ q + r ≤ ring => -ring - q ≤ r ≤ ring - q
+        # edges are clipped to make a diamond, and then clipping it again to make a hexagon
+            # constraints:
+                # r >= -ring and r <= ring : creates flat top and flat bottom
+                # -q - ring : cuts top-left corner
+                # -q + ring : cuts bottom-right corner
+    for r in range(r1, r2 + 1): # covers all r values ; (r1 fixed, r2 from min to r2=r1)
+        # convert axial coordinates (q, r) to pixel (cx, cy)
+        # qr = position on the hex grid
+        px = side * (3.0 / 2.0) * q
+            # columns are shifted so that it is spaced
+            # horizontal spacing between columns: 3/2 * side
+        py = side * (math.sqrt(3) / 2.0 * q + math.sqrt(3) * r)
+            # math.sqrt(3) / 2.0 * q = vertically shifts creating an offset to have a staggered hex arrangement
+                # width = sqrt(3) * s
+                # height = 2 * s
+            # math.sqrt(3) * r = vertical movement due to r 
+                # vertical spacing between rows: sqrt(3) * r
+        centers.append((px, py))
+
+# build a mask by testing points against each hexagon polygon
+pts = np.column_stack((X.ravel(), Y.ravel())) 
+    # ravel = turns it into a 1D array
+    # column_stack = turns it into coordinate pairs of (x,y)
+mask = np.zeros(X.size, dtype=bool)
+    # creates a mask outside of the hexagon
+    # X.size: 400x400 = 160000
+angles = np.arange(6) * (2 * math.pi / 6.0)
+    # computes the 6 vertex angles: 0, π/3, 2π/3,.. 
+effective_side = side * (1.0 - gap)
+for (cx, cy) in centers:
+    if cx == 0 and cy == 0:
+        continue
+        # also masks the center hexagon to make it JWST-like
+    verts = np.column_stack((cx + effective_side * np.cos(angles), cy + effective_side * np.sin(angles)))
+    path = Path(verts) # making the hexagon using the vertices above
+    inside = path.contains_points(pts) 
+        # testing each pixel
+        # T : pixel is inside the hexagon ; F : pixel outside
+    mask |= inside
+        # only generate the pixel inside the hexagon
+
+mask = mask.reshape((N, N))
+    # returns it back from 160000 to 400x400
+
+
+# change the color of the hexagons
+I = np.zeros((N, N, 3))
+    # N x N size
+    # last number = the color hex
+I[mask] = (1.0, 0.875, 0.0) # golden yellow
+
+# plot settings
+# fig, plt = plt.subplots(figsize=(6, 6))
+plt.title('JWST-like Hexagon Array')
+plt.imshow(I, origin='lower', extent=[-10, 10, -10, 10])
+    # origin = pins the center to the bottom-left axis instead of top-left
+    # extent [horiz-min, max, vert-min, max]
+plt.axis('off') # removes axis
+
+plt.show()
+
+# %%

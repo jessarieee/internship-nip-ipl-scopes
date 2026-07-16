@@ -1,0 +1,43 @@
+# %%
+
+# INSTRUCTIONS
+# Hubble’s Primary Mirror
+# create a circle with a hole in the middle (annulus) 
+
+# # importing libraries
+import numpy as np
+import matplotlib.pyplot as plt
+import math
+
+# initiating values
+
+# 2d grids
+N = 1000 # pixel count: 1000x1000 
+x = np.linspace(-10, 10, num = N) # X ϵ [-10 cm, 10 cm]
+y = x # square ; Y ϵ [-10 cm, 10 cm]
+X, Y = np.meshgrid(x, y)
+
+# draw an annulus (circle with a hole inside)
+big_radius = 8.0
+small_radius = 3.0
+R = np.sqrt(X**2 + Y**2) # distance from the center 
+mask = (R < big_radius) & (R > small_radius)
+    # points that are inside the big circle but outside the small
+
+# plots [I is considered a matrix]
+I = np.zeros((N, N, 3)) 
+    # N x N = dimensions
+    # 3 = rgb colors
+I[mask] = (0.659, 0.694, 0.729) # mirror-like in rgb
+
+# plot settings
+plt.title('Hubble’s Primary Mirror')
+plt.imshow(I, origin='lower', extent=[-10, 10, -10, 10])
+    # origin = pins the center to the bottom-left axis instead of top-left
+    # extent [horiz-min, max, vert-min, max]
+plt.axis('off') # removes axis
+
+plt.show()
+
+
+# %%

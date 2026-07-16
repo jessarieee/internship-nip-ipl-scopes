@@ -1,0 +1,75 @@
+# %%
+
+# importing libraries
+import numpy as np 
+import matplotlib.pyplot as plt 
+import math
+
+# initiating values
+
+# 2d grids
+N = 2000 # pixel
+x = np.linspace(-15, 15, num = N) # [-15,15]
+y = x # square
+X,Y = np.meshgrid(x,y)
+
+# colors
+blu, bla, rd, gr, yl = np.zeros((N,N)), np.zeros((N,N)), np.zeros((N,N)), np.zeros((N,N)), np.zeros((N,N))
+    # N x N = dimensions
+ 
+# draw colored circles 
+Rt, Ro, deg = 3, 4, 30
+    # Rt = upper circle from the origin
+    # Ro = radius of each outer circle
+    # deg = angle used to position the upper circles
+dx, dy = 8.5, 2.5
+Ri = Ro - 0.65
+    # subtract an inner radius to only show rings
+
+# blue (top-left)
+R = np.sqrt((X+dx)**2 + (Y+dy)**2)
+    # center = (-dx, -dy)
+blu = (R < Ro) & (R > Ri)
+
+# black
+R = np.sqrt((X)**2 + (Y+dy)**2)
+    # center: 
+bla = (R < Ro) & (R > Ri)
+
+# red
+R = np.sqrt((X-dx)**2 + (Y+dy)**2)
+    # center: 
+rd = (R < Ro) & (R > Ri)
+
+# yellow
+R = np.sqrt((X+dx/2)**2 + (Y-dy/2)**2)
+    # center: 
+yl = (R < Ro) & (R > Ri)
+
+# green
+R = np.sqrt((X-dx/2)**2 + (Y-dy/2)**2)
+    # center: 
+gr = (R < Ro) & (R > Ri)
+     
+I = np.zeros((N, N, 3))
+    # N x N pixels
+    # 3 colors
+
+I = np.ones((N, N, 3))  # white background
+
+# colors of the rings
+I[blu] = [0, 0.467, 0.745]
+I[bla] = [0, 0, 0]
+I[rd]  = [0.937, 0.161, 0.235]
+I[gr]  = [0.000, 0.624, 0.239]
+I[yl]  = [0.988, 0.694, 0.192]
+
+# I = np.clip(I, 0, 1) # clean up display
+
+# plot settings
+plt.imshow(I)
+plt.axis('off')
+
+plt.show()
+
+# %%
