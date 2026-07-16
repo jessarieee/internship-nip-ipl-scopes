@@ -8,5 +8,5 @@ pyshtools
 requests
 glob
 os
-xarray
+xarraycd 
 cartopy
