@@ -1,0 +1,182 @@
+/*
+timestamp: micros only
+
+
+/*
+keywords:
+adjust - user adjustment
+revise - improve code
+
+install: CP2104 USB Driver
+*/
+
+// libraries for the SD Card
+#include <WiFi.h>
+#include <SPI.h>
+#include <SD.h>
+#include <time.h>
+#include <cstdint>
+
+// sd card communication pins
+#define SD_CS    13
+#define SD_MOSI  15
+#define SD_MISO  2
+#define SD_SCK   14
+
+// synchronize clock using wifi
+const char* ssid = "BeeHAIve"; // adjust depending on laptop wifi
+const char* password = "b33h41v3";
+
+// declaring pins and variables
+const int piezo = 36; // ADC pin
+const int bias_midpt = 2047; // at 3.3/2 = 1.65V bias, the midpoint is 4095/2 = 2047
+  // revise: this can be improve since midpoint isnt constant at 2047
+
+const int threshold = 0; // adjust based on required sensitivity
+
+#pragma pack(push, 1) // forces compiler to place data next to each other (1 byte packing)
+// data package structure
+  struct SensorPacket {
+    unsigned long timestampUs; // elapsed microseconds since program start
+    uint16_t intensity; // 2 bytes for uint16 
+  };
+#pragma pack(pop) // restores compiler alignement rules so only the one in #pragma is under the 1byte packing
+
+// saving as binary raw packets
+File dataFile;
+const uint32_t sampleIntervalUs = 1000000 / 4000; // 4 kHz sampling rate
+  // calculations in microseconds: 1 second / 4000 samples = 250 μs per sample
+uint32_t lastSampleTime = 0; // stores timestamp of last sensor reading to prevent crashing
+uint32_t sampleCounter = 0; // only counts +#, tracks sensor samples since program began
+const uint8_t bufferSize = 64; // const uint8 for capacity limit of data packets per time
+SensorPacket packetBuffer[bufferSize]; // array named packetBuffer to reserve memory to hold up to 64 data recods
+  // each record is type SensorPacket
+uint8_t packetBufferCount = 0; // uint8 packetBufferCount to track how many SensorPacket are currently in packetBuffer at any time
+unsigned long startMicros = 0; // reference start time for elapsed microseconds
+
+// SD Card storing
+void flushPacketBuffer() { // declares function flushPacketBuffer
+  if (packetBufferCount == 0) {
+    return; // if buffer is empty, it exits the function to prevent writing null data
+  }
+
+    // write packetBuffer as raw binary block
+    if (packetBufferCount > 0) {
+      dataFile.write((const uint8_t *)packetBuffer, packetBufferCount * sizeof(SensorPacket));
+    }
+
+  dataFile.flush(); // forces unsaved data to be written to SD Card
+  packetBufferCount = 0; // resets packet count to 0, emptying buffer
+}
+
+void setup() {
+  Serial.begin(115200); // serial monitor for deubigging
+
+  // allow set up for a few seconds before printing out data to avoid a lot of 2047
+  // also, delay to charge 2.2uF bias capacitor to change to 1.65V
+  delay(5000); 
+
+  // analogReadResolution(12); // for display
+
+  pinMode(piezo, INPUT); // sets piezo as input 
+
+  // optional: set ADC attenuation for full 0V - 3.3V range
+  // ensures the ESP32 accurately maps 3.3V to 4095
+  analogSetPinAttenuation(piezo, ADC_11db);
+
+  // outputs the results in serial monitor
+  Serial.println("System Initialized. 1.65V Bias Stabilized.");
+
+  // connect to wifi
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) { // loop until the wifi is connected
+      delay(500); // delay to process connection
+      Serial.print("."); // prints . while waiting (becomes ellipses)
+    }
+
+  Serial.println(); // new line
+  Serial.println("WiFi Connected"); // connection is successful
+  Serial.println("Local IP Address:"); // connection is successful
+  Serial.println(WiFi.localIP()); // prints local ip address
+  
+  configTime(8 * 3600, 0, "pool.ntp.org"); // connects to network time protocol server for exact time
+    // 8*3600 for GMT+8 (PH time), no daylight savings
+
+  struct tm timeinfo; // store time and date
+
+  Serial.print("Connecting to WiFi");
+  while (!getLocalTime(&timeinfo)) { // syncing the time from NTP server to local code
+    delay(500); // delays code while waiting to sync
+    Serial.print("."); // prints . while waiting (becomes ellipses)
+  }
+
+  // prepares the SD card for data storage
+  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+
+  if (!SD.begin(SD_CS)) {  // when the SD card fails, this proceeds
+    Serial.println("SD Card Mount Failed");
+    while (1); // stops the if completely
+  }
+
+  Serial.println("SD Card Ready"); // otherwise it is ready
+
+  SD.remove("/data_record.bin");
+  dataFile = SD.open("/data_record.bin", FILE_WRITE);
+
+  if (!dataFile) {
+    Serial.println("Failed to open data file");
+    while (1);
+  }
+
+  // initialize reference start time and write a small binary header
+  startMicros = micros();
+  const char magic[4] = {'N','I','P','1'}; // file identifier
+  dataFile.write((const uint8_t *)magic, 4);
+  uint32_t sm = (uint32_t)startMicros;
+  dataFile.write((const uint8_t *)&sm, sizeof(sm));
+  dataFile.flush();
+
+  Serial.println("Binary logging started at 4 kHz");
+}
+
+void loop() {
+
+  unsigned long now = micros();
+
+  int rawValue = analogRead(piezo); // read raw analog value from 0 to 4095
+  int waveValue = rawValue - bias_midpt; // calculates wave from 1.65V baseline
+    // if rawVale is 2048, waveValue~0. if its 3000, waveValue is 3000-2048= +952
+  int intensity = abs(waveValue); // absolute value of waveValue
+  
+  SensorPacket packet; // packet variable
+  packet.timestampUs = now - startMicros; // elapsed microseconds since program start
+  packet.intensity = (uint16_t)intensity; // stores in 16-bit unsigned int where values are within 0-65535
+
+  // check if the vibration exceeds your noise threshold
+  if (intensity > threshold) {
+    /*
+    Serial.print(rawValue);       // value 1: raw shifted wave (centered at ~2048)
+    Serial.print(",");
+    Serial.print(waveValue);      // value 2: true AC wave (centered at 0)
+    Serial.print(",");
+    */
+    Serial.println(intensity);    // value 3: Absolute magnitude of the vibration
+    
+    sampleCounter++; // +1 to sampleCounter, tracks how many times (intensity > threshold) has been met
+
+    if (packetBufferCount >= bufferSize) { // checks if packetBuffer is full
+      flushPacketBuffer(); // if max: calls fn to process (empty) the buffer
+    }
+
+    packetBuffer[packetBufferCount++] = packet; // adds current packet data into packetBuffer then +1 to packetBufferCount
+
+    /*
+    if (sampleCounter % 1000 == 0) { // uses modulo to check if total number of logged samples is multiple of 1000
+      Serial.print("Sample logged: "); // prints the progress to serial monitor
+      Serial.println(sampleCounter); // prints sample count
+    } // closes this if-block if (intensity < threshold)
+    */
+  }
+}
